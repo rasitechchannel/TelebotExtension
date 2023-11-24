@@ -1,0 +1,103 @@
+package com.rasitech.telebot;
+
+import com.google.appinventor.components.annotations.*;
+import com.google.appinventor.components.runtime.*;
+import com.google.appinventor.components.runtime.util.*;
+import com.google.appinventor.components.common.*;
+import com.google.appinventor.components.runtime.errors.*;
+import com.google.appinventor.components.runtime.collect.*;
+
+import okhttp3.*;
+import java.io.IOException;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+@DesignerComponent(
+    version = 1,
+    description = "Extension for Telegram Bot",
+    category = ComponentCategory.EXTENSION,
+    nonVisible = true,
+    iconName = "images/extension.png"
+)
+@SimpleObject(external = true)
+public class TelebotExtension extends AndroidNonvisibleComponent {
+
+    private static final String BASE_URL = "https://api.telegram.org/bot";
+    private String botToken;
+    private OnMessageReceivedListener messageReceivedListener;
+
+    public TelebotExtension(ComponentContainer container) {
+        super(container.$form());
+    }
+
+    @SimpleProperty(category = PropertyCategory.BEHAVIOR)
+    public String BotToken() {
+        return botToken;
+    }
+
+    @DesignerProperty(editorType = PropertyTypeConstants.PROPERTY_TYPE_STRING,
+            defaultValue = "your_bot_token_here")
+    @SimpleProperty(description = "Get or set the bot token.")
+    public void BotToken(String token) {
+        botToken = token;
+    }
+
+    @SimpleEvent(description = "Event triggered when a message is received.")
+    public void OnMessageReceived(final String message) {
+        if (messageReceivedListener != null) {
+            form.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    messageReceivedListener.onMessageReceived(message);
+                }
+            });
+        }
+    }
+
+    @SimpleFunction(description = "Start listening for incoming messages.")
+    public void StartListening() {
+        OkHttpClient client = new OkHttpClient();
+        Request request = new Request.Builder()
+                .url(BASE_URL + botToken + "/getUpdates")
+                .build();
+
+        client.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                e.printStackTrace();
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                if (response.isSuccessful()) {
+                    String responseData = response.body().string();
+                    parseAndTriggerEvent(responseData);
+                } else {
+                    System.out.println("Error: " + response.code() + " " + response.message());
+                }
+            }
+        });
+    }
+
+    private void parseAndTriggerEvent(String responseData) {
+        try {
+            JSONObject jsonObject = new JSONObject(responseData);
+            if (jsonObject.has("result")) {
+                JSONObject resultObject = jsonObject.getJSONArray("result").optJSONObject(0);
+                if (resultObject != null && resultObject.has("message")) {
+                    String message = resultObject.getJSONObject("message").toString();
+                    OnMessageReceived(message);
+                }
+            }
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Antarmuka berada di luar kelas
+}
+
+// Antarmuka OnMessageReceivedListener
+interface OnMessageReceivedListener {
+    void onMessageReceived(String message);
+}
